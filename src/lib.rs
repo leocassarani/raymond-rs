@@ -38,8 +38,16 @@ impl Vec3 {
         (self.x.powi(2) + self.y.powi(2) + self.z.powi(2)).sqrt()
     }
 
+    fn add(&self, other: &Vec3) -> Vec3 {
+        Vec3::new(self.x + other.x, self.y + other.y, self.z + other.z)
+    }
+
     fn subtract(&self, other: &Vec3) -> Vec3 {
         Vec3::new(self.x - other.x, self.y - other.y, self.z - other.z)
+    }
+
+    fn scale(&self, f: f64) -> Vec3 {
+        Vec3::new(self.x * f, self.y * f, self.z * f)
     }
 
     fn dot(&self, other: &Vec3) -> f64 {
@@ -78,6 +86,16 @@ impl RGB {
     fn new(red: f64, green: f64, blue: f64) -> Self {
         Self { red, green, blue }
     }
+
+    fn shade(&self, f: f64) -> RGB {
+        if f <= 0. {
+            RGB::black()
+        } else if f >= 1. {
+            self.clone()
+        } else {
+            RGB::new(self.red * f, self.green * f, self.blue * f)
+        }
+    }
 }
 
 struct Ray {
@@ -88,6 +106,10 @@ struct Ray {
 impl Ray {
     fn new(origin: Vec3, direction: Vec3) -> Self {
         Self { origin, direction }
+    }
+
+    fn point_at(&self, t: f64) -> Vec3 {
+        self.origin.add(&self.direction.scale(t))
     }
 }
 
@@ -120,6 +142,27 @@ impl Sphere {
                 .cloned()
                 .find(|&t| t >= 0.)
         }
+    }
+
+    fn surface_normal(&self, point: &Vec3) -> Vec3 {
+        point.subtract(&self.center)
+    }
+}
+
+struct Light {
+    pos: Vec3,
+    power: f64,
+}
+
+impl Light {
+    fn new(pos: Vec3, power: f64) -> Self {
+        Self { pos, power }
+    }
+
+    fn illuminate(&self, point: &Vec3, surface_normal: &Vec3) -> f64 {
+        let ray = self.pos.subtract(point);
+        let cosine = surface_normal.dot(&ray.unit()) / surface_normal.length();
+        self.power * cosine / (4. * f64::consts::PI * ray.length().powi(2))
     }
 }
 
@@ -206,6 +249,7 @@ impl Camera {
 pub struct Scene {
     camera: Camera,
     spheres: Vec<Sphere>,
+    light: Light,
 }
 
 #[wasm_bindgen]
@@ -222,7 +266,13 @@ impl Scene {
             Sphere::new(Vec3::new(5., 3., 5.), 2., RGB::red()),
         ];
 
-        Self { camera, spheres }
+        let light = Light::new(Vec3::new(1., 8., 0.), 500.);
+
+        Self {
+            camera,
+            spheres,
+            light,
+        }
     }
 
     pub fn render(&self, img: &mut Image) {
@@ -233,17 +283,22 @@ impl Scene {
                 let x_offset = x as f64 / img.width as f64;
                 let ray = self.camera.cast(x_offset, y_offset);
 
-                let (sphere, _) = self
-                    .spheres
-                    .iter()
-                    .fold((None, f64::INFINITY), |min, s| match s.intersect(&ray) {
+                let nearest = self.spheres.iter().fold((None, f64::INFINITY), |min, s| {
+                    match s.intersect(&ray) {
                         Some(t) if t < min.1 => (Some(s), t),
                         _ => min,
-                    });
+                    }
+                });
 
-                match sphere {
-                    Some(s) => img.draw(x, y, s.color),
-                    None => img.draw(x, y, RGB::black()),
+                match nearest {
+                    (Some(sphere), t) => {
+                        let point = ray.point_at(t);
+                        let normal = sphere.surface_normal(&point);
+                        let power = self.light.illuminate(&point, &normal);
+                        let color = sphere.color.shade(power);
+                        img.draw(x, y, color);
+                    }
+                    (None, _) => img.draw(x, y, RGB::black()),
                 };
             }
         }
