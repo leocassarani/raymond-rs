@@ -131,6 +131,15 @@ impl Film {
     }
 }
 
+enum Move {
+    Left,
+    Right,
+    Up,
+    Down,
+    Forward,
+    Back,
+}
+
 struct Camera {
     eye: Vec3,
     film: Film,
@@ -145,6 +154,35 @@ impl Camera {
         let origin = self.eye;
         let direction = self.film.project(x, y).subtract(&origin).unit();
         Ray::new(origin, direction)
+    }
+
+    fn move_one(&mut self, mov: Move) {
+        match mov {
+            Move::Left => {
+                self.eye.x -= 1.;
+                self.film.origin.x -= 1.;
+            }
+            Move::Right => {
+                self.eye.x += 1.;
+                self.film.origin.x += 1.;
+            }
+            Move::Up => {
+                self.eye.y += 1.;
+                self.film.origin.y += 1.;
+            }
+            Move::Down => {
+                self.eye.y -= 1.;
+                self.film.origin.y -= 1.;
+            }
+            Move::Forward => {
+                self.eye.z += 1.;
+                self.film.origin.z += 1.;
+            }
+            Move::Back => {
+                self.eye.z -= 1.;
+                self.film.origin.z -= 1.;
+            }
+        }
     }
 }
 
@@ -189,6 +227,36 @@ impl Scene {
                 }
             }
         }
+    }
+
+    #[wasm_bindgen(js_name = moveLeft)]
+    pub fn move_left(&mut self) {
+        self.camera.move_one(Move::Left);
+    }
+
+    #[wasm_bindgen(js_name = moveRight)]
+    pub fn move_right(&mut self) {
+        self.camera.move_one(Move::Right);
+    }
+
+    #[wasm_bindgen(js_name = moveUp)]
+    pub fn move_up(&mut self) {
+        self.camera.move_one(Move::Up);
+    }
+
+    #[wasm_bindgen(js_name = moveDown)]
+    pub fn move_down(&mut self) {
+        self.camera.move_one(Move::Down);
+    }
+
+    #[wasm_bindgen(js_name = moveForward)]
+    pub fn move_forward(&mut self) {
+        self.camera.move_one(Move::Forward);
+    }
+
+    #[wasm_bindgen(js_name = moveBack)]
+    pub fn move_back(&mut self) {
+        self.camera.move_one(Move::Back);
     }
 }
 
