@@ -1,11 +1,16 @@
-import { Scene } from "raymond";
+import { Image, Scene } from "raymond";
 import { memory } from "raymond/raymond_bg";
 
+const scene = new Scene();
+
 const canvas = document.getElementById("canvas");
+const image = new Image(canvas.width, canvas.height);
+
+const length = canvas.width * canvas.height;
+const pixels = new Uint8ClampedArray(memory.buffer, image.pixels(), length << 2);
+const imageData = new ImageData(pixels, canvas.width, canvas.height);
+
 const ctx = canvas.getContext('2d');
 
-const scene = Scene.new();
-const length = canvas.width * canvas.height;
-const buf = new Uint8ClampedArray(memory.buffer, scene.render(), length << 2);
-const imageData = new ImageData(buf, canvas.width, canvas.height);
+scene.render(image);
 ctx.putImageData(imageData, 0, 0);
