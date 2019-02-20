@@ -306,9 +306,9 @@ impl Scene {
                             .sum();
 
                         let color = sphere.color.shade(power);
-                        img.draw(x, y, color);
+                        img.draw(x, y, &color);
                     }
-                    (None, _) => img.draw(x, y, RGB::black()),
+                    (None, _) => img.draw(x, y, &RGB::black()),
                 };
             }
         }
@@ -372,7 +372,7 @@ impl Image {
 }
 
 impl Image {
-    fn draw(&mut self, x: usize, y: usize, color: RGB) {
+    fn draw(&mut self, x: usize, y: usize, color: &RGB) {
         let idx = 4 * (x + y * self.width);
         self.pixels[idx] = color.red as u8;
         self.pixels[idx + 1] = color.green as u8;
