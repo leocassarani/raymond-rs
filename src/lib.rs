@@ -4,6 +4,7 @@ extern crate wasm_bindgen;
 mod utils;
 
 use cfg_if::cfg_if;
+use std::f64;
 use wasm_bindgen::prelude::*;
 
 cfg_if! {
@@ -54,18 +55,22 @@ struct RGB {
 }
 
 impl RGB {
+    #[allow(dead_code)]
     fn red() -> Self {
         Self::new(255., 0., 0.)
     }
 
+    #[allow(dead_code)]
     fn green() -> Self {
         Self::new(0., 255., 0.)
     }
 
+    #[allow(dead_code)]
     fn blue() -> Self {
         Self::new(0., 0., 255.)
     }
 
+    #[allow(dead_code)]
     fn black() -> Self {
         Self::new(0., 0., 0.)
     }
@@ -101,9 +106,20 @@ impl Sphere {
         }
     }
 
-    fn intersects(&self, ray: &Ray) -> bool {
+    fn intersect(&self, ray: &Ray) -> Option<f64> {
         let oc = ray.origin.subtract(&self.center);
-        ray.direction.dot(&oc).powi(2) >= oc.length().powi(2) - self.radius.powi(2)
+        let dot = ray.direction.dot(&oc);
+        let sqrt_term = dot.powi(2) - oc.length().powi(2) + self.radius.powi(2);
+
+        if sqrt_term < 0. {
+            None
+        } else {
+            let sqrt = sqrt_term.sqrt();
+            vec![-dot - sqrt, -dot + sqrt]
+                .iter()
+                .cloned()
+                .find(|&t| t >= 0.)
+        }
     }
 }
 
@@ -202,8 +218,8 @@ impl Scene {
         );
 
         let spheres = vec![
-            Sphere::new(Vec3::new(5., 3., 5.), 2., RGB::red()),
             Sphere::new(Vec3::new(1., 5., 10.), 2., RGB::green()),
+            Sphere::new(Vec3::new(5., 3., 5.), 2., RGB::red()),
         ];
 
         Self { camera, spheres }
@@ -217,14 +233,18 @@ impl Scene {
                 let x_offset = x as f64 / img.width as f64;
                 let ray = self.camera.cast(x_offset, y_offset);
 
-                for sphere in &self.spheres {
-                    if sphere.intersects(&ray) {
-                        img.draw(x, y, sphere.color);
-                        break;
-                    }
+                let (sphere, _) = self
+                    .spheres
+                    .iter()
+                    .fold((None, f64::INFINITY), |min, s| match s.intersect(&ray) {
+                        Some(t) if t < min.1 => (Some(s), t),
+                        _ => min,
+                    });
 
-                    img.draw(x, y, RGB::black());
-                }
+                match sphere {
+                    Some(s) => img.draw(x, y, s.color),
+                    None => img.draw(x, y, RGB::black()),
+                };
             }
         }
     }
