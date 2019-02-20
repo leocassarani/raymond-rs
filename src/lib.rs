@@ -249,7 +249,7 @@ impl Camera {
 pub struct Scene {
     camera: Camera,
     spheres: Vec<Sphere>,
-    light: Light,
+    lights: Vec<Light>,
 }
 
 #[wasm_bindgen]
@@ -262,16 +262,20 @@ impl Scene {
         );
 
         let spheres = vec![
-            Sphere::new(Vec3::new(1., 5., 10.), 2., RGB::green()),
-            Sphere::new(Vec3::new(5., 3., 5.), 2., RGB::red()),
+            Sphere::new(Vec3::new(2., 6., 8.), 1., RGB::red()),
+            Sphere::new(Vec3::new(1., 6., 5.), 1., RGB::blue()),
+            Sphere::new(Vec3::new(3., 0., 12.), 5., RGB::green()),
         ];
 
-        let light = Light::new(Vec3::new(1., 8., 0.), 500.);
+        let lights = vec![
+            Light::new(Vec3::new(1., 8., 0.), 300.),
+            Light::new(Vec3::new(8., 5., 5.), 300.),
+        ];
 
         Self {
             camera,
             spheres,
-            light,
+            lights,
         }
     }
 
@@ -294,7 +298,13 @@ impl Scene {
                     (Some(sphere), t) => {
                         let point = ray.point_at(t);
                         let normal = sphere.surface_normal(&point);
-                        let power = self.light.illuminate(&point, &normal);
+
+                        let power = self
+                            .lights
+                            .iter()
+                            .map(|light| light.illuminate(&point, &normal))
+                            .sum();
+
                         let color = sphere.color.shade(power);
                         img.draw(x, y, color);
                     }
