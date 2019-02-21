@@ -114,8 +114,17 @@ struct Ray {
 }
 
 impl Ray {
+    fn cast(from: &Vec3, to: &Vec3) -> Self {
+        let direction = to.subtract(from);
+        Ray::new(from.clone(), direction)
+    }
+
     fn new(origin: Vec3, direction: Vec3) -> Self {
         Self { origin, direction }
+    }
+
+    fn unit(&self) -> Ray {
+        Ray::new(self.origin, self.direction.unit())
     }
 
     fn point_at(&self, t: f64) -> Vec3 {
@@ -140,8 +149,8 @@ impl Sphere {
 
     fn intersect(&self, ray: &Ray) -> Option<f64> {
         let oc = ray.origin.subtract(&self.center);
-        let dot = ray.direction.dot(&oc);
-        let sqrt_term = dot.sqr() - oc.length().sqr() + self.radius.sqr();
+        let dot = ray.direction.unit().dot(&oc);
+        let sqrt_term = dot.sqr() - (oc.length().sqr() - self.radius.sqr());
 
         if sqrt_term < 0. {
             None
@@ -150,7 +159,7 @@ impl Sphere {
             vec![-dot - sqrt, -dot + sqrt]
                 .iter()
                 .cloned()
-                .find(|&t| t >= 0.)
+                .find(|&t| t >= 1e-10)
         }
     }
 
@@ -169,10 +178,21 @@ impl Light {
         Self { pos, power }
     }
 
-    fn illuminate(&self, point: &Vec3, surface_normal: &Vec3) -> f64 {
-        let ray = self.pos.subtract(point);
-        let cosine = surface_normal.dot(&ray.unit()) / surface_normal.length();
-        self.power * cosine / (4. * f64::consts::PI * ray.length().sqr())
+    fn illuminate(&self, spheres: &[Sphere], point: &Vec3, surface_normal: &Vec3) -> f64 {
+        let ray = Ray::cast(point, &self.pos);
+        let len = ray.direction.length();
+        let unit_ray = ray.unit();
+
+        for sphere in spheres {
+            if let Some(t) = sphere.intersect(&unit_ray) {
+                if t < len {
+                    return 0.;
+                }
+            }
+        }
+
+        let cosine = surface_normal.dot(&unit_ray.direction) / surface_normal.length();
+        (self.power * cosine) / (4. * f64::consts::PI * len.sqr())
     }
 }
 
@@ -267,19 +287,22 @@ impl Scene {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
         let camera = Camera::new(
-            Vec3::new(3., 3., 0.),
-            Film::new(Vec3::new(0., 0., 3.), 6., 6.),
+            Vec3::new(0., 0., -3.),
+            Film::new(Vec3::new(-4., -3., 3.), 8., 6.),
         );
 
         let spheres = vec![
-            Sphere::new(Vec3::new(2., 6., 8.), 1., RGB::red()),
-            Sphere::new(Vec3::new(1., 6., 5.), 1., RGB::blue()),
-            Sphere::new(Vec3::new(3., 0., 12.), 5., RGB::green()),
+            Sphere::new(Vec3::new(-1., 4., 13.), 2., RGB::red()),
+            Sphere::new(Vec3::new(2., 2., 20.), 5., RGB::green()),
+            Sphere::new(Vec3::new(10., -1., 25.), 3., RGB::new(128., 0., 128.)),
+            Sphere::new(Vec3::new(12., 4., 24.), 2., RGB::new(255., 255., 0.)),
+            Sphere::new(Vec3::new(-5., -2., 12.), 3., RGB::blue()),
+            Sphere::new(Vec3::new(-1., -1., 11.), 1., RGB::new(255., 128., 178.)),
         ];
 
         let lights = vec![
-            Light::new(Vec3::new(1., 8., 0.), 300.),
-            Light::new(Vec3::new(8., 5., 5.), 300.),
+            Light::new(Vec3::new(-3., 12., -2.), 3700.),
+            Light::new(Vec3::new(12., 12., 22.), 1250.),
         ];
 
         Self {
@@ -312,13 +335,13 @@ impl Scene {
                         let power = self
                             .lights
                             .iter()
-                            .map(|light| light.illuminate(&point, &normal))
+                            .map(|light| light.illuminate(&self.spheres, &point, &normal))
                             .sum();
 
                         let color = sphere.color.shade(power);
                         img.draw(x, y, &color);
                     }
-                    (None, _) => img.draw(x, y, &RGB::black()),
+                    (None, _) => img.draw(x, y, &RGB::new(180., 180., 180.)),
                 };
             }
         }
