@@ -17,6 +17,16 @@ cfg_if! {
     }
 }
 
+trait Square {
+    fn sqr(self) -> Self;
+}
+
+impl Square for f64 {
+    fn sqr(self) -> f64 {
+        self.powi(2)
+    }
+}
+
 #[derive(Copy, Clone)]
 struct Vec3 {
     x: f64,
@@ -35,7 +45,7 @@ impl Vec3 {
     }
 
     fn length(&self) -> f64 {
-        (self.x.powi(2) + self.y.powi(2) + self.z.powi(2)).sqrt()
+        (self.x.sqr() + self.y.sqr() + self.z.sqr()).sqrt()
     }
 
     fn add(&self, other: &Vec3) -> Vec3 {
@@ -131,7 +141,7 @@ impl Sphere {
     fn intersect(&self, ray: &Ray) -> Option<f64> {
         let oc = ray.origin.subtract(&self.center);
         let dot = ray.direction.dot(&oc);
-        let sqrt_term = dot.powi(2) - oc.length().powi(2) + self.radius.powi(2);
+        let sqrt_term = dot.sqr() - oc.length().sqr() + self.radius.sqr();
 
         if sqrt_term < 0. {
             None
@@ -162,7 +172,7 @@ impl Light {
     fn illuminate(&self, point: &Vec3, surface_normal: &Vec3) -> f64 {
         let ray = self.pos.subtract(point);
         let cosine = surface_normal.dot(&ray.unit()) / surface_normal.length();
-        self.power * cosine / (4. * f64::consts::PI * ray.length().powi(2))
+        self.power * cosine / (4. * f64::consts::PI * ray.length().sqr())
     }
 }
 
