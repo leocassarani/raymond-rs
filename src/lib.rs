@@ -40,8 +40,10 @@ impl Vec3 {
     }
 
     fn unit(&self) -> Vec3 {
-        let len = self.length();
-        Vec3::new(self.x / len, self.y / len, self.z / len)
+        // It is faster to multiply than divide two numbers, so we turn the division
+        // operations into multiplications by the inverse of the vector's length.
+        let inv = 1. / self.length();
+        Vec3::new(self.x * inv, self.y * inv, self.z * inv)
     }
 
     fn length(&self) -> f64 {
@@ -313,11 +315,14 @@ impl Scene {
     }
 
     pub fn render(&self, img: &mut Image) {
+        let height_inv = 1. / img.height as f64;
+        let width_inv = 1. / img.width as f64;
+
         for y in 0..img.height {
-            let y_offset = y as f64 / img.height as f64;
+            let y_offset = y as f64 * height_inv;
 
             for x in 0..img.width {
-                let x_offset = x as f64 / img.width as f64;
+                let x_offset = x as f64 * width_inv;
                 let ray = self.camera.cast(x_offset, y_offset);
 
                 let nearest = self.spheres.iter().fold((None, f64::INFINITY), |min, s| {
