@@ -2,6 +2,9 @@
 name = "raymond"
 version = "0.1.0"
 authors = ["Leo Cassarani <me@leocassarani.net>"]
+description = "A simple ray tracer targeting WebAssembly"
+license = "GPL-3.0-or-later"
+edition = "2018"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
