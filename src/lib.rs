@@ -95,8 +95,21 @@ impl RGB {
         Self::new(0., 0., 0.)
     }
 
+    #[allow(dead_code)]
+    fn white() -> Self {
+        Self::new(255., 255., 255.)
+    }
+
     fn new(red: f64, green: f64, blue: f64) -> Self {
         Self { red, green, blue }
+    }
+
+    fn add(&self, other: &RGB) -> RGB {
+        RGB::new(
+            f64::min(self.red + other.red, 255.),
+            f64::min(self.green + other.green, 255.),
+            f64::min(self.blue + other.blue, 255.),
+        )
     }
 
     fn shade(&self, f: f64) -> RGB {
@@ -125,6 +138,10 @@ impl Ray {
         Self { origin, direction }
     }
 
+    fn length(&self) -> f64 {
+        self.direction.length()
+    }
+
     fn unit(&self) -> Ray {
         Ray::new(self.origin, self.direction.unit())
     }
@@ -132,20 +149,28 @@ impl Ray {
     fn point_at(&self, t: f64) -> Vec3 {
         self.origin.add(&self.direction.scale(t))
     }
+
+    fn reflect(&self, point: &Vec3, normal: &Vec3) -> Ray {
+        let cosine = self.direction.dot(&normal);
+        let reflection = self.direction.subtract(&normal.scale(2. * cosine));
+        Ray::new(point.clone(), reflection)
+    }
 }
 
 struct Sphere {
     center: Vec3,
     radius: f64,
     color: RGB,
+    glossiness: f64,
 }
 
 impl Sphere {
-    fn new(center: Vec3, radius: f64, color: RGB) -> Self {
+    fn new(center: Vec3, radius: f64, color: RGB, glossiness: f64) -> Self {
         Self {
             center,
             radius,
             color,
+            glossiness,
         }
     }
 
@@ -182,7 +207,7 @@ impl Light {
 
     fn illuminate(&self, spheres: &[Sphere], point: &Vec3, surface_normal: &Vec3) -> f64 {
         let ray = Ray::cast(point, &self.pos);
-        let len = ray.direction.length();
+        let len = ray.length();
         let unit_ray = ray.unit();
 
         for sphere in spheres {
@@ -289,22 +314,30 @@ impl Scene {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
         let camera = Camera::new(
-            Vec3::new(0., 0., -3.),
-            Film::new(Vec3::new(-4., -3., 3.), 8., 6.),
+            Vec3::new(0., 0., -6.),
+            Film::new(Vec3::new(-4., -3., 0.), 8., 4.5),
         );
 
         let spheres = vec![
-            Sphere::new(Vec3::new(-1., 4., 13.), 2., RGB::red()),
-            Sphere::new(Vec3::new(2., 2., 20.), 5., RGB::green()),
-            Sphere::new(Vec3::new(10., -1., 25.), 3., RGB::new(128., 0., 128.)),
-            Sphere::new(Vec3::new(12., 4., 24.), 2., RGB::new(255., 255., 0.)),
-            Sphere::new(Vec3::new(-5., -2., 12.), 3., RGB::blue()),
-            Sphere::new(Vec3::new(-1., -1., 11.), 1., RGB::new(255., 128., 178.)),
+            Sphere::new(Vec3::new(-1., 4., 15.), 2., RGB::red(), 1.),
+            Sphere::new(Vec3::new(2., 2., 20.), 5., RGB::green(), 1.),
+            Sphere::new(Vec3::new(10., -1., 25.), 3., RGB::new(128., 0., 128.), 0.7),
+            Sphere::new(Vec3::new(12., 4., 24.), 2., RGB::new(255., 255., 0.), 0.5),
+            Sphere::new(Vec3::new(-5., -2., 12.), 3., RGB::blue(), 0.7),
+            Sphere::new(
+                Vec3::new(-1., -1., 11.),
+                1.,
+                RGB::new(255., 128., 178.),
+                0.2,
+            ),
+            Sphere::new(Vec3::new(-11., 6., 12.), 4., RGB::white(), 1.),
+            Sphere::new(Vec3::new(6., -9., 12.), 5., RGB::black(), 1.),
         ];
 
         let lights = vec![
             Light::new(Vec3::new(-3., 12., -2.), 3700.),
             Light::new(Vec3::new(12., 12., 22.), 1250.),
+            Light::new(Vec3::new(-5., 8., 30.), 2500.),
         ];
 
         Self {
@@ -325,29 +358,8 @@ impl Scene {
                 let x_offset = x as f64 * width_inv;
                 let ray = self.camera.cast(x_offset, y_offset);
 
-                let nearest = self.spheres.iter().fold((None, f64::INFINITY), |min, s| {
-                    match s.intersect(&ray) {
-                        Some(t) if t < min.1 => (Some(s), t),
-                        _ => min,
-                    }
-                });
-
-                match nearest {
-                    (Some(sphere), t) => {
-                        let point = ray.point_at(t);
-                        let normal = sphere.surface_normal(&point);
-
-                        let power = self
-                            .lights
-                            .iter()
-                            .map(|light| light.illuminate(&self.spheres, &point, &normal))
-                            .sum();
-
-                        let color = sphere.color.shade(power);
-                        img.draw(x, y, &color);
-                    }
-                    (None, _) => img.draw(x, y, &RGB::new(180., 180., 180.)),
-                };
+                let color = self.light(&ray, 1);
+                img.draw(x, y, &color);
             }
         }
     }
@@ -380,6 +392,51 @@ impl Scene {
     #[wasm_bindgen(js_name = moveBack)]
     pub fn move_back(&mut self) {
         self.camera.move_one(Move::Back);
+    }
+}
+
+impl Scene {
+    fn light(&self, ray: &Ray, depth: u8) -> RGB {
+        let nearest =
+            self.spheres
+                .iter()
+                .fold((None, f64::INFINITY), |min, s| match s.intersect(ray) {
+                    Some(t) if t < min.1 => (Some(s), t),
+                    _ => min,
+                });
+
+        match nearest {
+            (Some(sphere), t) => {
+                let point = ray.point_at(t);
+                let normal = sphere.surface_normal(&point);
+
+                let radiance = self
+                    .lights
+                    .iter()
+                    .map(|light| light.illuminate(&self.spheres, &point, &normal))
+                    .sum();
+
+                let mut color = sphere.color;
+
+                if sphere.glossiness > 0. && depth < 100 {
+                    let reflection = ray.reflect(&point, &normal.unit());
+                    let reflection_color =
+                        self.light(&reflection, depth + 1).shade(sphere.glossiness);
+
+                    color = color.add(&reflection_color)
+                }
+
+                color.shade(radiance)
+            }
+            (None, _) => {
+                let y = 0.7 - ray.direction.y.abs();
+                let mut x = ray.direction.x / 2.0;
+                if x < y {
+                    x = y
+                }
+                RGB::new(x * 255., y * 255., x * 255.)
+            }
+        }
     }
 }
 
