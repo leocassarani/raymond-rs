@@ -4,7 +4,7 @@ extern crate wasm_bindgen;
 mod utils;
 
 use cfg_if::cfg_if;
-use std::f64;
+use std::{f64, u8};
 use wasm_bindgen::prelude::*;
 
 cfg_if! {
@@ -77,17 +77,17 @@ struct RGB {
 impl RGB {
     #[allow(dead_code)]
     fn red() -> Self {
-        Self::new(255., 0., 0.)
+        Self::new(1., 0., 0.)
     }
 
     #[allow(dead_code)]
     fn green() -> Self {
-        Self::new(0., 255., 0.)
+        Self::new(0., 1., 0.)
     }
 
     #[allow(dead_code)]
     fn blue() -> Self {
-        Self::new(0., 0., 255.)
+        Self::new(0., 0., 1.)
     }
 
     #[allow(dead_code)]
@@ -97,7 +97,7 @@ impl RGB {
 
     #[allow(dead_code)]
     fn white() -> Self {
-        Self::new(255., 255., 255.)
+        Self::new(1., 1., 1.)
     }
 
     fn new(red: f64, green: f64, blue: f64) -> Self {
@@ -106,9 +106,9 @@ impl RGB {
 
     fn add(&self, other: &RGB) -> RGB {
         RGB::new(
-            f64::min(self.red + other.red, 255.),
-            f64::min(self.green + other.green, 255.),
-            f64::min(self.blue + other.blue, 255.),
+            self.red + other.red,
+            self.green + other.green,
+            self.blue + other.blue,
         )
     }
 
@@ -120,6 +120,18 @@ impl RGB {
         } else {
             RGB::new(self.red * f, self.green * f, self.blue * f)
         }
+    }
+
+    fn write(&self, pixels: &mut [u8]) {
+        let max = u8::MAX as f64;
+        let red = max * f64::min(self.red, 1.0);
+        let green = max * f64::min(self.green, 1.0);
+        let blue = max * f64::min(self.blue, 1.0);
+
+        pixels[0] = red.round() as u8;
+        pixels[1] = green.round() as u8;
+        pixels[2] = blue.round() as u8;
+        pixels[3] = u8::MAX;
     }
 }
 
@@ -321,15 +333,10 @@ impl Scene {
         let spheres = vec![
             Sphere::new(Vec3::new(-1., 4., 15.), 2., RGB::red(), 1.),
             Sphere::new(Vec3::new(2., 2., 20.), 5., RGB::green(), 1.),
-            Sphere::new(Vec3::new(10., -1., 25.), 3., RGB::new(128., 0., 128.), 0.7),
-            Sphere::new(Vec3::new(12., 4., 24.), 2., RGB::new(255., 255., 0.), 0.5),
+            Sphere::new(Vec3::new(10., -1., 25.), 3., RGB::new(0.5, 0., 0.5), 0.7),
+            Sphere::new(Vec3::new(12., 4., 24.), 2., RGB::new(1., 1., 0.), 0.5),
             Sphere::new(Vec3::new(-5., -2., 12.), 3., RGB::blue(), 0.7),
-            Sphere::new(
-                Vec3::new(-1., -1., 11.),
-                1.,
-                RGB::new(255., 128., 178.),
-                0.2,
-            ),
+            Sphere::new(Vec3::new(-1., -1., 11.), 1., RGB::new(1., 0.5, 0.7), 0.2),
             Sphere::new(Vec3::new(-11., 6., 12.), 4., RGB::white(), 1.),
             Sphere::new(Vec3::new(6., -9., 12.), 5., RGB::black(), 1.),
         ];
@@ -434,7 +441,7 @@ impl Scene {
                 if x < y {
                     x = y
                 }
-                RGB::new(x * 255., y * 255., x * 255.)
+                RGB::new(x, y, x)
             }
         }
     }
@@ -468,10 +475,7 @@ impl Image {
 
 impl Image {
     fn draw(&mut self, x: usize, y: usize, color: &RGB) {
-        let idx = 4 * (x + y * self.width);
-        self.pixels[idx] = color.red as u8;
-        self.pixels[idx + 1] = color.green as u8;
-        self.pixels[idx + 2] = color.blue as u8;
-        self.pixels[idx + 3] = 255;
+        let idx = (x + y * self.width) << 2;
+        color.write(&mut self.pixels[idx..idx + 4]);
     }
 }
